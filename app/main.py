@@ -1,18 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
-import time
 import logging
+import time
+from pathlib import Path
 
-from fastapi import (
-    FastAPI,
-    File,
-    Form,
-    HTTPException,
-    Request,
-    UploadFile,
-    status,
-)
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import HTMLResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -25,7 +17,6 @@ from app.utils import (
     save_text_content,
     save_upload_file,
 )
-
 
 # ------------------------------------------------------------------------------
 # Logging configuration
@@ -47,10 +38,10 @@ app = FastAPI(
     description="RAG chatbot for story documents (.txt, .doc, .docx, .pdf, and pasted text).",
 )
 
-
 # ------------------------------------------------------------------------------
 # Middleware for request logging & latency
 # ------------------------------------------------------------------------------
+
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -73,6 +64,7 @@ async def log_requests(request: Request, call_next):
 # ------------------------------------------------------------------------------
 # Routes
 # ------------------------------------------------------------------------------
+
 
 @app.get("/health", tags=["system"])
 def health_check():
@@ -122,6 +114,9 @@ def index():
             <textarea id="text" name="text" rows="8" required></textarea>
             <button type="submit">Submit Text</button>
         </form>
+
+        <h2>Chat</h2>
+        <p><a href="/chat-ui">Go to chat page →</a></p>
     </body>
     </html>
     """
@@ -247,7 +242,7 @@ async def upload_text(
 @app.post("/chat", response_model=ChatResponse, tags=["chat"])
 async def chat(request: ChatRequest):
     """
-    Ask a question about any of the ingested stories.
+    Ask a question about any of the ingested stories (JSON API).
     """
     if not request.query.strip():
         raise HTTPException(
@@ -265,6 +260,88 @@ async def chat(request: ChatRequest):
         num_context_documents=len(docs),
         context_documents=docs,
     )
+
+
+@app.get("/chat-ui", response_class=HTMLResponse, tags=["ui"])
+def chat_ui():
+    """
+    Simple HTML-only chat page (no JavaScript).
+    Lets user type a question and shows the answer on a new page.
+    """
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Stories GPT RAG - Chat</title>
+        <style>
+            body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; }
+            h1 { margin-bottom: 0.5rem; }
+            form { border: 1px solid #ddd; padding: 1rem; margin-top: 1rem; border-radius: 8px; }
+            textarea { width: 100%; margin-bottom: 0.75rem; }
+            button { padding: 0.5rem 1rem; cursor: pointer; }
+            a { text-decoration: none; color: #007bff; }
+        </style>
+    </head>
+    <body>
+        <h1>Stories GPT RAG - Chat</h1>
+        <p>Ask a question about any ingested story document.</p>
+        <form action="/chat-ui" method="post">
+            <label for="query"><strong>Your question</strong></label><br/>
+            <textarea id="query" name="query" rows="4" required></textarea><br/>
+            <button type="submit">Ask</button>
+        </form>
+        <p><a href="/">← Back to Upload</a></p>
+    </body>
+    </html>
+    """
+
+
+@app.post("/chat-ui", response_class=HTMLResponse, tags=["ui"])
+async def chat_ui_post(query: str = Form(...)):
+    """
+    Handle chat questions from the HTML form and render the answer.
+    """
+    cleaned_query = query.strip()
+    if not cleaned_query:
+        return HTMLResponse(
+            """
+            <html>
+            <body>
+                <p>Query cannot be empty.</p>
+                <p><a href="/chat-ui">Go back</a></p>
+            </body>
+            </html>
+            """,
+            status_code=400,
+        )
+
+    result = chatbot.chat(query=cleaned_query, top_k=3)
+    answer: str = result["answer"]
+
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Stories GPT RAG - Answer</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; }}
+            h1, h2 {{ margin-bottom: 0.5rem; }}
+            p {{ line-height: 1.5; }}
+            pre {{ white-space: pre-wrap; }}
+            a {{ text-decoration: none; color: #007bff; }}
+        </style>
+    </head>
+    <body>
+        <h1>Answer</h1>
+        <h2>Your Question</h2>
+        <p>{cleaned_query}</p>
+        <h2>Response</h2>
+        <p>{answer}</p>
+        <p><a href="/chat-ui">Ask another question</a></p>
+        <p><a href="/">← Back to Upload</a></p>
+    </body>
+    </html>
+    """
 
 
 # ------------------------------------------------------------------------------
