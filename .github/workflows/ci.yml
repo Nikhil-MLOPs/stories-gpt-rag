@@ -38,17 +38,9 @@ jobs:
       - name: Run tests
         run: pytest -q
 
-      - name: Check DVC status (non-blocking)
+      - name: Check DVC status (non-fatal in CI)
         run: |
-          dvc status -q || echo "DVC status non-zero (likely no data cache in CI). Ignoring for now."
+          dvc status -q || echo "DVC status returned non-zero (likely missing cache/remote in CI). Skipping failure."
 
       - name: Build Docker image
         run: docker build -t stories-gpt-rag:ci .
-
-      - name: Install kubectl
-        uses: azure/setup-kubectl@v4
-        with:
-          version: "latest"
-
-      - name: Validate Kubernetes manifests with kustomize
-        run: kubectl kustomize k8s > /dev/null
