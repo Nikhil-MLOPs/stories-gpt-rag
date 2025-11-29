@@ -10,6 +10,11 @@ jobs:
   build-test-and-docker:
     runs-on: ubuntu-latest
 
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      ECR_REPOSITORY: stories-gpt-rag
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -42,8 +47,9 @@ jobs:
         run: |
           dvc status -q || echo "DVC status returned non-zero (likely missing cache/remote in CI). Skipping failure."
 
-      - name: Build Docker image
-        run: docker build -t stories-gpt-rag:ci .
+      - name: Build Docker image (local tag)
+        run: |
+          docker build -t stories-gpt-rag:ci .
 
       - name: Install kubectl
         uses: azure/setup-kubectl@v4
@@ -52,3 +58,40 @@ jobs:
 
       - name: Validate Kubernetes manifests with kustomize
         run: kubectl kustomize k8s > /dev/null
+
+      # Only push to ECR for pushes (not pull requests)
+      - name: Configure AWS credentials
+        if: github.event_name == 'push'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to ECR
+        if: github.event_name == 'push'
+        run: |
+          aws ecr get-login-password --region $AWS_REGION | \
+            docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+
+      - name: Tag and push image to ECR
+        if: github.event_name == 'push'
+        run: |
+          IMAGE_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY
+          GIT_SHA=${{ github.sha }}
+          SHORT_SHA=${GIT_SHA::7}
+
+          echo "Using IMAGE_URI=$IMAGE_URI"
+          echo "Git SHA=$GIT_SHA, short SHA=$SHORT_SHA"
+
+          # Tag images
+          docker tag stories-gpt-rag:ci $IMAGE_URI:latest
+          docker tag stories-gpt-rag:ci $IMAGE_URI:$SHORT_SHA
+
+          # Push tags
+          docker push $IMAGE_URI:latest
+          docker push $IMAGE_URI:$SHORT_SHA
+
+          echo "Pushed images:"
+          echo "  $IMAGE_URI:latest"
+          echo "  $IMAGE_URI:$SHORT_SHA"

@@ -16,31 +16,11 @@ spec:
     spec:
       containers:
         - name: stories-gpt-rag
-          # For local clusters (minikube/kind) build and load this image
-          image: stories-gpt-rag:latest
+          image: 490332585872.dkr.ecr.us-east-1.amazonaws.com/stories-gpt-rag
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
               name: http
           envFrom:
             - secretRef:
-                name: openai-api-secret
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: 15
-            periodSeconds: 20
-          resources:
-            requests:
-              cpu: "100m"
-              memory: "128Mi"
-            limits:
-              cpu: "500m"
-              memory: "512Mi"
+              name: openai-api-secret
