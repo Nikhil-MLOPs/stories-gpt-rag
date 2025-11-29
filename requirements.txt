@@ -3,6 +3,8 @@ uvicorn[standard]
 python-multipart
 
 pydantic
+pydantic-settings
+
 python-dotenv
 
 openai>=1.0.0
@@ -15,3 +17,5 @@ mlflow
 dvc
 
 ruff
+pypdf
+python-docx
