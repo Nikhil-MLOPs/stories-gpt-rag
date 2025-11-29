@@ -7,7 +7,7 @@ on:
     branches: ["main"]
 
 jobs:
-  build-and-test:
+  build-test-and-docker:
     runs-on: ubuntu-latest
 
     steps:
@@ -37,3 +37,9 @@ jobs:
 
       - name: Run tests
         run: pytest -q
+
+      - name: Check DVC status
+        run: dvc status -q
+
+      - name: Build Docker image
+        run: docker build -t stories-gpt-rag:ci .

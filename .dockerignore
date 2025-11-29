@@ -1,0 +1,24 @@
+# Python stuff
+__pycache__/
+*.py[cod]
+
+# Virtual env
+.venv/
+
+# Git
+.git/
+.gitignore
+
+# Local data / experiments / mlflow
+data/
+experiments/
+logs/
+mlruns/
+.dvc/
+
+# IDE
+.vscode/
+.idea/
+
+# DVC cache
+.dvc/cache/
