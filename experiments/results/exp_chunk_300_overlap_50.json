@@ -1,0 +1,7 @@
+{
+  "experiment_name": "exp_chunk_300_overlap_50",
+  "chunk_size": 300,
+  "chunk_overlap": 50,
+  "num_chunks": 1,
+  "avg_chunk_words": 84.0
+}
