@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import HTMLResponse
 
-from app.schemas import DocumentIngestResponse
+from app.chatbot import chatbot
+from app.rag_engine import rag_engine
+from app.schemas import ChatRequest, ChatResponse, DocumentIngestResponse
 from app.utils import (
     get_file_extension,
     is_allowed_extension,
@@ -14,7 +18,7 @@ from app.utils import (
 
 app = FastAPI(
     title="Stories GPT RAG",
-    version="0.1.0",
+    version="0.3.0",
     description="RAG chatbot for story documents (.txt, .doc, .docx, .pdf, and pasted text).",
 )
 
@@ -75,7 +79,8 @@ def index():
 @app.post("/upload-file", response_model=DocumentIngestResponse, tags=["ingestion"])
 async def upload_file(file: UploadFile = File(...)):
     """
-    Accept a single file upload and store it under data/raw.
+    Accept a single file upload, store it under data/raw,
+    extract text, chunk, and index into the vector store.
     """
     if not file.filename:
         raise HTTPException(
@@ -91,12 +96,48 @@ async def upload_file(file: UploadFile = File(...)):
 
     saved_path = await save_upload_file(file)
     ext = get_file_extension(file.filename)
+    # Our utils generate filenames as "<uuid>_<clean_stem>.<ext>"
+    doc_id = Path(saved_path).stem.split("_")[0]
+
+    num_chunks: int | None = None
+    status_str = "stored"
+    message: str | None = None
+
+    try:
+        # Try to extract, chunk and index
+        text = rag_engine.extract_text_from_file(saved_path)
+        chunks = rag_engine.chunk_text(text)
+        num_chunks = len(chunks)
+
+        if num_chunks > 0:
+            rag_engine.index_chunks(doc_id=doc_id, chunks=chunks)
+            status_str = "indexed"
+        else:
+            status_str = "stored_no_chunks"
+            message = "File saved but produced no text chunks."
+    except ValueError as exc:
+        # E.g. unsupported .doc for extraction
+        status_str = "stored_no_index"
+        message = (
+            "File saved, but could not be indexed automatically: "
+            f"{exc}"
+        )
+    except Exception as exc:  # pragma: no cover (defensive)
+        status_str = "stored_no_index"
+        message = (
+            "File saved, but indexing failed due to an internal error: "
+            f"{exc}"
+        )
 
     return DocumentIngestResponse(
         original_filename=file.filename,
         extension=ext,
         stored_path=str(saved_path),
         source="file",
+        doc_id=doc_id,
+        num_chunks=num_chunks,
+        status=status_str,
+        message=message,
     )
 
 
@@ -106,7 +147,8 @@ async def upload_text(
     title: str | None = Form(None),
 ):
     """
-    Accept pasted text, save as a .txt file under data/raw.
+    Accept pasted text, save as a .txt file under data/raw,
+    then chunk and index it.
     """
     if not text or not text.strip():
         raise HTTPException(
@@ -117,10 +159,58 @@ async def upload_text(
     saved_path = save_text_content(title=title, text=text)
     filename = (title or "pasted_text").strip() or "pasted_text"
     filename = f"{filename}.txt"
+    doc_id = Path(saved_path).stem.split("_")[0]
+
+    num_chunks: int | None = None
+    status_str = "stored"
+    message: str | None = None
+
+    try:
+        chunks = rag_engine.chunk_text(text)
+        num_chunks = len(chunks)
+        if num_chunks > 0:
+            rag_engine.index_chunks(doc_id=doc_id, chunks=chunks)
+            status_str = "indexed"
+        else:
+            status_str = "stored_no_chunks"
+            message = "Text saved but produced no text chunks."
+    except Exception as exc:  # pragma: no cover (defensive)
+        status_str = "stored_no_index"
+        message = (
+            "Text saved, but indexing failed due to an internal error: "
+            f"{exc}"
+        )
 
     return DocumentIngestResponse(
         original_filename=filename,
         extension=".txt",
         stored_path=str(saved_path),
         source="pasted_text",
+        doc_id=doc_id,
+        num_chunks=num_chunks,
+        status=status_str,
+        message=message,
+    )
+
+
+@app.post("/chat", response_model=ChatResponse, tags=["chat"])
+async def chat(request: ChatRequest):
+    """
+    Ask a question about any of the ingested stories.
+    """
+    if not request.query.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Query cannot be empty.",
+        )
+
+    result = chatbot.chat(query=request.query, top_k=request.top_k)
+    answer: str = result["answer"]
+    docs = result["documents"]
+
+    return ChatResponse(
+        answer=answer,
+        top_k=request.top_k,
+        num_context_documents=len(docs),
+        context_documents=docs,
     )
