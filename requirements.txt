@@ -19,3 +19,5 @@ dvc
 ruff
 pypdf
 python-docx
+
+prometheus-fastapi-instrumentator

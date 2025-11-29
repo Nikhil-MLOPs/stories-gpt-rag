@@ -1,9 +1,20 @@
 from __future__ import annotations
 
 from pathlib import Path
+import time
+import logging
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, status
+from fastapi import (
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import HTMLResponse
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.chatbot import chatbot
 from app.rag_engine import rag_engine
@@ -16,12 +27,52 @@ from app.utils import (
 )
 
 
+# ------------------------------------------------------------------------------
+# Logging configuration
+# ------------------------------------------------------------------------------
+
+logger = logging.getLogger("stories-gpt-rag")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
+
+# ------------------------------------------------------------------------------
+# FastAPI app
+# ------------------------------------------------------------------------------
+
 app = FastAPI(
     title="Stories GPT RAG",
     version="0.3.0",
     description="RAG chatbot for story documents (.txt, .doc, .docx, .pdf, and pasted text).",
 )
 
+
+# ------------------------------------------------------------------------------
+# Middleware for request logging & latency
+# ------------------------------------------------------------------------------
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time_ms = (time.time() - start_time) * 1000.0
+
+    logger.info(
+        "request",
+        extra={
+            "path": request.url.path,
+            "method": request.method,
+            "status_code": response.status_code,
+            "process_time_ms": round(process_time_ms, 2),
+        },
+    )
+    return response
+
+
+# ------------------------------------------------------------------------------
+# Routes
+# ------------------------------------------------------------------------------
 
 @app.get("/health", tags=["system"])
 def health_check():
@@ -214,3 +265,10 @@ async def chat(request: ChatRequest):
         num_context_documents=len(docs),
         context_documents=docs,
     )
+
+
+# ------------------------------------------------------------------------------
+# Prometheus metrics endpoint (/metrics)
+# ------------------------------------------------------------------------------
+
+Instrumentator().instrument(app).expose(app)
