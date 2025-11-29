@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+
+# Virtual env
+.venv/
+
+# Env files
+.env
+.env.*
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# Data & logs
+data/raw/
+data/processed/
+logs/
+
+# DVC / MLflow (later)
+.dvc/
+.mlflow/

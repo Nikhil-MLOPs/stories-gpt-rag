@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+python-multipart
+
+pydantic
+python-dotenv
+
+openai>=1.0.0
+chromadb
+
+pytest
+httpx
+
+mlflow
+dvc
+
+ruff
