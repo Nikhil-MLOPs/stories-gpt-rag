@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: stories-gpt-rag
+  labels:
+    app: stories-gpt-rag
+spec:
+  type: ClusterIP
+  selector:
+    app: stories-gpt-rag
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+      protocol: TCP

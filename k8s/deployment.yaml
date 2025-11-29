@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stories-gpt-rag
+  labels:
+    app: stories-gpt-rag
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stories-gpt-rag
+  template:
+    metadata:
+      labels:
+        app: stories-gpt-rag
+    spec:
+      containers:
+        - name: stories-gpt-rag
+          # For local clusters (minikube/kind) build and load this image
+          image: stories-gpt-rag:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - secretRef:
+                name: openai-api-secret
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
